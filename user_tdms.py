@@ -30,7 +30,7 @@ class UTdms(TdmsFile):
 	def get_channel(self,group_name,channel_name):
 		g = self.get_channels(group_name)
 		if len(g) > 0:
-			for i in g:
+			for i in g: 
 				if channel_name == i.channel:
 					return i
 			if isinstance(channel_name,int):
