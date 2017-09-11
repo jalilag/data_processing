@@ -1,23 +1,29 @@
-from user_tdms import UTdms
+from user_idas import DasData
 import numpy as n
+from matplotlib import pyplot as plt
+import time
 
+t = time.time()
+f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
+tt = time.time()
+print("data loaded in " + str(tt-t) + "s")
 
-f = UTdms("data/water_7m3h_1inch_170803153239.tdms")
+Tmean = 0.5
+Tend = 60
+c = 0
+dt = int(f.fsamp * Tmean)
+res = n.zeros((100,dt))
+res = n.fft.fft2(res)
+for i in range(0,int(Tend*f.fsamp),dt):
+	print(i)
+	res += n.fft.fft2(f.get_array(10,110,i,int(i+dt)))
+	c+= 1
+res = res / c
+print("FFT mean in ",str(time.time()-tt),"s")
+# plt.imshow(abs(res))
+# plt.show()
+# plt.imshow(abs(res))
 
-fech = int(f.get_param("SamplingFrequency[Hz]"))
-
-Tmean = 0.1
-chs = f.get_channels(0)
-Nl = len(chs)
-Nt = len(f.get_channel(0,0).data)
-Tmax = Nt/fech
-res = n.zeros((Nl,int(Tmean*fech)))
-ii = int(Tmean*fech)
-for i in range(Nt,int(Tmean*fech)):
-	print(n.size(res))
-	for j in range(4):
-		res[j,0:int(Tmean*fech)] = f.get_channel(0,j).data[i:ii]
-	ii += int(Tmean*fech)
 # res = 
 # # Lecture des propriétés
 # params = tdms_file.object()

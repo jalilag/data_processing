@@ -36,7 +36,8 @@ class UTdms(TdmsFile):
 			if isinstance(channel_name,int):
 				if len(g) > channel_name:
 					return g[channel_name]
-			if channel_name.isdigit():
-				if len(g) > int(channel_name):
-					return g[int(channel_name)]
+			else:
+				if channel_name.isdigit():
+					if len(g) > int(channel_name):
+						return g[int(channel_name)]
 		return list()
