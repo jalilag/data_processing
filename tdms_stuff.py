@@ -1,6 +1,7 @@
 from user_idas import DasData
 import numpy as n
 from matplotlib import pyplot as plt
+from scipy import signal
 import time
 
 t = time.time()
@@ -8,8 +9,8 @@ f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
 tt = time.time()
 print("data loaded in " + str(tt-t) + "s")
 
-Tmean = 0.5
-Tend = 10
+Tmean = 0.1
+Tend = 1
 c = 0
 dt = int(f.fsamp * Tmean)
 res = n.zeros((100,int(dt/2)+1),dtype=complex)
@@ -19,6 +20,9 @@ for i in range(0,int(Tend*f.fsamp),dt):
 	print(dt,i)
 	res += n.fft.rfft2(f.get_array(section[0],section[1],i,int(i+dt)),norm="ortho")
 	c+= 1
+res = res/c
+res2 = signal.resample(res,10000,axis=0)
+freq = n.fft.rfftfreq
 res = res / c
 print("FFT mean in ",str(time.time()-tt),"s")
 plt.imshow(res)
