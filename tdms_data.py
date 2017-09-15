@@ -6,7 +6,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-from scipy import integrate
+# from scipy import integrate
 
 #class mass_posttraitement
 import glob
@@ -123,75 +123,75 @@ class tdms_data(nptdms.TdmsFile):
 	def stack(self, data, number):
 		return sum(data[0:number])
 	#application d'un filtre de Butterworth passe bas
-	def filter_lowpass(self, data, data_is_fourier=False, wp=0.0001, ws=0.01, pass_loss_dB=0.01, stop_loss_dB=40, option='butterworth'):
-		if not data_is_fourier:
-			data_fft = np.fft.rfft(data)
-		else:
-			data_fft=data
-		if option == 'butterworth':
-			N, Wn = signal.buttord(wp, ws, pass_loss_dB, stop_loss_dB, False)
-			b, a = signal.butter(N, Wn, btype='lowpass', analog=False, output='ba')
-			w, h = signal.freqz(b, a, np.size(data_fft,1), whole=False)
-		#check filter
-		#print(N," = N \n", Wn," = Wn\n", b," = b\n", a," = a\n", w," = w\n", h," = h\n")
-		#plt.semilogx(w*f/2/np.pi, np.log10(abs(h)))
-		#plt.title('lowpass Filter used')
-		#plt.show()			
-		#calc Fourier(data)*Fourier(filter)
-		for i in range(np.size(data_fft,0)):
-			for j in range(np.size(data_fft,1)):
-				data_fft[i][j] = data_fft[i][j]*h[j]
-		#ifft
-		if not data_is_fourier:
-			return np.fft.irfft(data_fft)
-		else:
-			return data_fft
-	#bandpass
-	def filter_bandpass(self, data, data_is_fourier=False, wp=[0.2,0.5], ws=[0.1,0.6], pass_loss_dB=0.01, stop_loss_dB=40, option='butterworth'):
-		if not data_is_fourier:
-			data_fft = np.fft.rfft(data)
-		else:
-			data_fft=data		
-		if option == 'butterworth':
-			N, Wn = signal.buttord(wp, ws, pass_loss_dB, stop_loss_dB, analog=False)
-			b, a = signal.butter(N, Wn, btype='bandpass', analog=False, output='ba')
-			w, h = signal.freqz(b, a, np.size(data_fft,1), whole=False)
-		#check filter
-		#print(N," = N \n", Wn," = Wn\n", b," = b\n", a," = a\n", w," = w\n", h," = h\n")
-		#plt.semilogx(w*f/2/np.pi, np.log10(abs(h)))
-		#plt.title('bandpass Filter used')
-		#plt.show()			
-		#calc Fourier(data)*Fourier(filter)
-		for i in range(np.size(data_fft,0)):
-			for j in range(np.size(data_fft,1)):
-				data_fft[i][j] = data_fft[i][j]*h[j]
-		#ifft
-		if not data_is_fourier:
-			return np.fft.irfft(data_fft)
-		else:
-			return data_fft
-	def integrate(self, data):
-		L = self.object().property("MeasureLength[m]")
-		dx = self.object().property("SpatialResolution[m]")
-		T = self.object().property("StreamTime[s]")
-		f = self.object().property("SamplingFrequency[Hz]")
-		dt=1/f
-		time_pts = np.linspace(0,dt,f*T)
-		res = data.copy()
-		for i in range(len(self.group_channels('Measurement'))):
-			res[i][0]=0
-			for j in range(int(f*T)-1):						
-				res[i][j+1] = res[i][j]+integrate.simps(data[i][j:j+2], time_pts[j:j+2], dt)
-		return res
-	def get_timeAverage(self, data):
-		res = np.zeros(np.size(data, 0))
-		for i in range(np.size(data, 0)):
-			res[i] = sum(data[i])/np.size(data, 1)
-		return res
-	def filter_moys(self, data, option="single_phase_flow"):
-		data = signal.detrend(data, 0)
-		data = signal.detrend(data, 1)
-		return 
+	# def filter_lowpass(self, data, data_is_fourier=False, wp=0.0001, ws=0.01, pass_loss_dB=0.01, stop_loss_dB=40, option='butterworth'):
+	# 	if not data_is_fourier:
+	# 		data_fft = np.fft.rfft(data)
+	# 	else:
+	# 		data_fft=data
+	# 	if option == 'butterworth':
+	# 		N, Wn = signal.buttord(wp, ws, pass_loss_dB, stop_loss_dB, False)
+	# 		b, a = signal.butter(N, Wn, btype='lowpass', analog=False, output='ba')
+	# 		w, h = signal.freqz(b, a, np.size(data_fft,1), whole=False)
+	# 	#check filter
+	# 	#print(N," = N \n", Wn," = Wn\n", b," = b\n", a," = a\n", w," = w\n", h," = h\n")
+	# 	#plt.semilogx(w*f/2/np.pi, np.log10(abs(h)))
+	# 	#plt.title('lowpass Filter used')
+	# 	#plt.show()			
+	# 	#calc Fourier(data)*Fourier(filter)
+	# 	for i in range(np.size(data_fft,0)):
+	# 		for j in range(np.size(data_fft,1)):
+	# 			data_fft[i][j] = data_fft[i][j]*h[j]
+	# 	#ifft
+	# 	if not data_is_fourier:
+	# 		return np.fft.irfft(data_fft)
+	# 	else:
+	# 		return data_fft
+	# #bandpass
+	# def filter_bandpass(self, data, data_is_fourier=False, wp=[0.2,0.5], ws=[0.1,0.6], pass_loss_dB=0.01, stop_loss_dB=40, option='butterworth'):
+	# 	if not data_is_fourier:
+	# 		data_fft = np.fft.rfft(data)
+	# 	else:
+	# 		data_fft=data		
+	# 	if option == 'butterworth':
+	# 		N, Wn = signal.buttord(wp, ws, pass_loss_dB, stop_loss_dB, analog=False)
+	# 		b, a = signal.butter(N, Wn, btype='bandpass', analog=False, output='ba')
+	# 		w, h = signal.freqz(b, a, np.size(data_fft,1), whole=False)
+	# 	#check filter
+	# 	#print(N," = N \n", Wn," = Wn\n", b," = b\n", a," = a\n", w," = w\n", h," = h\n")
+	# 	#plt.semilogx(w*f/2/np.pi, np.log10(abs(h)))
+	# 	#plt.title('bandpass Filter used')
+	# 	#plt.show()			
+	# 	#calc Fourier(data)*Fourier(filter)
+	# 	for i in range(np.size(data_fft,0)):
+	# 		for j in range(np.size(data_fft,1)):
+	# 			data_fft[i][j] = data_fft[i][j]*h[j]
+	# 	#ifft
+	# 	if not data_is_fourier:
+	# 		return np.fft.irfft(data_fft)
+	# 	else:
+	# 		return data_fft
+	# def integrate(self, data):
+	# 	L = self.object().property("MeasureLength[m]")
+	# 	dx = self.object().property("SpatialResolution[m]")
+	# 	T = self.object().property("StreamTime[s]")
+	# 	f = self.object().property("SamplingFrequency[Hz]")
+	# 	dt=1/f
+	# 	time_pts = np.linspace(0,dt,f*T)
+	# 	res = data.copy()
+	# 	for i in range(len(self.group_channels('Measurement'))):
+	# 		res[i][0]=0
+	# 		for j in range(int(f*T)-1):						
+	# 			res[i][j+1] = res[i][j]+integrate.simps(data[i][j:j+2], time_pts[j:j+2], dt)
+	# 	return res
+	# def get_timeAverage(self, data):
+	# 	res = np.zeros(np.size(data, 0))
+	# 	for i in range(np.size(data, 0)):
+	# 		res[i] = sum(data[i])/np.size(data, 1)
+	# 	return res
+	# def filter_moys(self, data, option="single_phase_flow"):
+	# 	data = signal.detrend(data, 0)
+	# 	data = signal.detrend(data, 1)
+	# 	return 
 	#data :: axis 0:k axis 1:t
 	def calc_2DFFT(self, data, distance_conversion_factor=1, fft_size_k=None, fft_size_t=None, stack_t=False, stack_t_interval=20000):
 		samplingf = self.object().property("SamplingFrequency[Hz]")

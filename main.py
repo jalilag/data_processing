@@ -3,8 +3,8 @@ import numpy as np
 
 
 
-datafolderpath = "../../../FLODAS/dataEpernon/27072017/waterSolo1inch/"
-filenameIn = datafolderpath+"water_8_8m3h_170727092132.tdms"
+datafolderpath = "data/water_1in/optical/"
+filenameIn = datafolderpath+"10_170803154549.tdms"
 
 d = tdms_data(filenameIn)
 #d.read_data_info()

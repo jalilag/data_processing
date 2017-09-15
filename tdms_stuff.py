@@ -9,19 +9,20 @@ tt = time.time()
 print("data loaded in " + str(tt-t) + "s")
 
 Tmean = 0.5
-Tend = 60
+Tend = 10
 c = 0
 dt = int(f.fsamp * Tmean)
-res = n.zeros((100,dt))
-res = n.fft.fft2(res)
+res = n.zeros((100,int(dt/2)+1),dtype=complex)
+
+section = [50,150]
 for i in range(0,int(Tend*f.fsamp),dt):
-	print(i)
-	res += n.fft.fft2(f.get_array(10,110,i,int(i+dt)))
+	print(dt,i)
+	res += n.fft.rfft2(f.get_array(section[0],section[1],i,int(i+dt)),norm="ortho")
 	c+= 1
 res = res / c
 print("FFT mean in ",str(time.time()-tt),"s")
-# plt.imshow(abs(res))
-# plt.show()
+plt.imshow(res)
+plt.show()
 # plt.imshow(abs(res))
 
 # res = 
