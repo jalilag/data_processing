@@ -39,3 +39,17 @@ class DasData(UTdms):
 			res[i-xfrom,0:Ny] = self.get_channel(0,i).data[yfrom:yend] 
 		return res
 
+	def fft_calc(self,pos_start,pos_end,mean_time,end_time,norm=None):
+		c = 0
+		dt = int(self.fsamp * mean_time)
+		res = n.zeros((int(pos_end-pos_start),int(dt/2)+1),dtype=complex)
+		for i in range(0,int(end_time*self.fsamp),dt):
+			print(dt,i,end_time)
+			res += n.fft.rfft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=None)
+			c+= 1
+		K_wave_num = n.fft.fftfreq(n.size(res,0),1)#k=1/lambda
+		sort = K_wave_num.argsort()
+		K_wave_num = K_wave_num[sort]
+		res = res[sort]#trier comme K_wave_num
+		return res/c
+
