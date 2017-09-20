@@ -1,5 +1,8 @@
 from user_tdms import UTdms
 import numpy as n
+from scipy import signal
+from multiprocessing import Pool,Process
+import sys
 
 class DasData(UTdms):
 	filename =""
@@ -29,6 +32,7 @@ class DasData(UTdms):
 		self.Nt = int(self.fsamp*self.duration)
 
 	def get_array(self,xfrom,xend,yfrom,yend):
+		"""Extract an array from a TDMS file"""
 		if xend < xfrom or yend < yfrom or xend > self.Nl or yend > self.Nt:
 			print("Erreur indice de matrice")
 			return list()
@@ -39,17 +43,137 @@ class DasData(UTdms):
 			res[i-xfrom,0:Ny] = self.get_channel(0,i).data[yfrom:yend] 
 		return res
 
-	def fft_calc(self,pos_start,pos_end,mean_time,end_time,norm=None):
+	def fft2_calc(self,pos_start,pos_end,start_time,mean_time,coef_time=1,fft_type="fft",norm=None,dist_corr=116,resamp=None,crop=None,val_sum=None,min_lim=None):
+		""" Calculation of 2d fft
+			pos_start,pos_end: define the position to consider
+			start_time:        Time where the fft begin
+			mean_time:         Duration of the signal on which is calculated   
+			coef_time:         How many sets are used
+			fft_type:          fft,rfft,ifft,irfft
+			norm:			   None or ortho
+			dist_corr:		   Relation between fiber length and pipe length
+			resamp:            [lsampling,timesampling]
+			crop:              [kinf,ksup,finf,fsup]
+			val_sum:           Intensity are summed or averaged (default averaged)
+			min_lim:           Set to 0 intensity less than min_lim
+		"""
 		c = 0
-		dt = int(self.fsamp * mean_time)
-		res = n.zeros((int(pos_end-pos_start),int(dt/2)+1),dtype=complex)
-		for i in range(0,int(end_time*self.fsamp),dt):
-			print(dt,i,end_time)
-			res += n.fft.rfft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=None)
+		start_data = int(start_time*self.fsamp)
+		dt = int(mean_time*self.fsamp)
+		duration = int(mean_time*coef_time*self.fsamp)
+		if fft_type == "fft" or fft_type == "ifft":
+			res = n.zeros((int(pos_end-pos_start),dt),dtype=complex)
+		if fft_type == "rfft" or fft_type == "irfft":
+			res = n.zeros((int(pos_end-pos_start),int(dt/2)+1),dtype=complex)
+		print("start time; i; duration")
+		for i in range(start_data,int(start_data+duration),dt):
+			print(start_data,i,duration)
+			if fft_type == "fft": res += n.fft.fft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
+			if fft_type == "rfft": res += n.fft.rfft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
+			if fft_type == "ifft": res += n.fft.ifft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
+			if fft_type == "irfft": res += n.fft.irfft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
 			c+= 1
-		K_wave_num = n.fft.fftfreq(n.size(res,0),1)#k=1/lambda
-		sort = K_wave_num.argsort()
-		K_wave_num = K_wave_num[sort]
-		res = res[sort]#trier comme K_wave_num
-		return res/c
+		dx = self.spatial_res/dist_corr
+		if val_sum is None: res = res/c
+		kvec = n.fft.fftfreq(n.size(res,0),dx)
+		if fft_type == "fft" or fft_type == "ifft": 
+			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
+		if fft_type == "rfft" or fft_type == "irfft":
+			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
 
+		if crop is not None:
+			res,kvec,fvec = self.crop_vecs(res,kvec,fvec,crop)
+		if min_lim is not None:
+			for i in range(n.size(res,0)):
+				for j in range(n.size(res,1)):
+					if res[i,j] < min_lim: res[i,j] = 0
+		if resamp is not None:
+			res,kvec,fvec = self.resamp_vecs(res,kvec,fvec,100,100,False)
+		res,kvec,fvec = self.sort_vecs(res,kvec,fvec)
+		return res,kvec,fvec
+
+	def fft2_calc_par(self,pos_start,pos_end,start_time,mean_time,coef_time=1,fft_type="fft",norm=None,dist_corr=116,resamp=None,crop=None,val_sum=None,min_lim=None):
+		""" Calculation of 2d fft
+			pos_start,pos_end: define the position to consider
+			start_time:        Time where the fft begin
+			mean_time:         Duration of the signal on which is calculated   
+			coef_time:         How many sets are used
+			fft_type:          fft,rfft,ifft,irfft
+			norm:			   None or ortho
+			dist_corr:		   Relation between fiber length and pipe length
+			resamp:            [lsampling,timesampling]
+			crop:              [kinf,ksup,finf,fsup]
+			val_sum:           Intensity are summed or averaged (default averaged)
+			min_lim:           Set to 0 intensity less than min_lim
+		"""
+		start_data = int(start_time*self.fsamp)
+		dt = int(mean_time*self.fsamp)
+		duration = int(mean_time*coef_time*self.fsamp)
+		if fft_type == "fft" or fft_type == "ifft":
+			res = n.zeros((int(pos_end-pos_start),dt),dtype=complex)
+		if fft_type == "rfft" or fft_type == "irfft":
+			res = n.zeros((int(pos_end-pos_start),int(dt/2)+1),dtype=complex)
+		print("start time; i; duration")
+		respool = list()
+		k = coef_time
+		for i in range(start_data,int(start_data+duration),k*dt):
+			pool = Pool()
+			for l in range(k):
+				if int(i+(l+1)*dt) <= int(start_data+duration):
+					argsdat = list()
+					argsdat.append((self.get_array(pos_start,pos_end,i+l*dt,int(i+(l+1)*dt)),norm))
+			if len(argsdat) > 0:
+				# pool = Pool()
+				# res += sum(pool.starmap(n.fft.rfft2,argsdat,100000000))
+				p=Process(target=n.fft.rfft2,args)
+
+		dx = self.spatial_res/dist_corr
+		if val_sum is None: res = res/coef_time
+		kvec = n.fft.fftfreq(n.size(res,0),dx)
+		if fft_type == "fft" or fft_type == "ifft": 
+			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
+		if fft_type == "rfft" or fft_type == "irfft":
+			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
+
+		if crop is not None:
+			res,kvec,fvec = self.crop_vecs(res,kvec,fvec,crop)
+		if min_lim is not None:
+			for i in range(n.size(res,0)):
+				for j in range(n.size(res,1)):
+					if res[i,j] < min_lim: res[i,j] = 0
+		if resamp is not None:
+			res,kvec,fvec = self.resamp_vecs(res,kvec,fvec,100,100,False)
+		res,kvec,fvec = self.sort_vecs(res,kvec,fvec)
+		return res,kvec,fvec
+
+
+	def resamp_vecs(self,data,xvec,yvec,N1=100,N2=100,sort_data=True):
+		print(n.size(xvec),n.size(yvec))
+		data = signal.resample(data,N1,axis=0)
+		data = signal.resample(data,N2,axis=1)
+		pool = Pool()
+		xvec,yvec = pool.starmap(signal.resample,[(xvec,N1),(yvec,N2)])
+		if sort_data: 
+			data,xvec,yvec = self.sort_vecs(data,xvec,yvec)
+		return data,xvec,yvec
+
+	def sort_vecs(self,data,xvec,yvec):
+		xsort = xvec.argsort()
+		xvec = xvec[xsort]
+		data = data[xsort]
+		ysort = yvec.argsort()
+		yvec = yvec[ysort]
+		for i in range(n.size(xvec)):
+			data[i] = data[i][ysort]
+		return data,xvec,yvec
+
+	def crop_vecs(self,data,xvec,yvec,crop):
+		xsort = n.where((xvec > crop[0]) & (xvec < crop[1]))[0]
+		ysort = n.where((yvec > crop[2]) & (yvec < crop[3]))[0]
+		xvec = xvec[xsort]
+		yvec = yvec[ysort]
+		data = data[xsort]
+		data2 = n.zeros((n.size(xvec),n.size(yvec)),dtype=complex)
+		for i in range(n.size(data,0)):
+			data2[i] = data[i][ysort]
+		return data2,xvec,yvec

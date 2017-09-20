@@ -1,15 +1,11 @@
-import pylab as pl
-import numpy as np
+from multiprocessing import Pool,Process
+from itertools import product
 
-nx = 2880
-ny = 5760
-shape = (nx,ny)
-sz = nx*ny
-data1 = np.random.rand(sz).reshape(shape)
-data2 = np.random.rand(sz).reshape(shape)
-data3 = data2-data1
+def f(a, b):
+    return a*b
 
-pl.clf() ; pl.imshow(data1)
-pl.clf() ; pl.imshow(data2)
-pl.clf() ; pl.imshow(data3)
-pl .show()
+if __name__ == '__main__':
+	p = Process(target=f, args=(4, 5))
+	p.start()
+	p.join()
+	# print(results)

@@ -5,15 +5,19 @@ class UTdms(TdmsFile):
 		super().__init__(file, memmap_dir=None)
 
 	def get_params(self):
+		""" Get all parameters"""
 		return self.object().properties
 
 	def get_param(self,key_name):
+		"""Get a parameter with key"""
 		return self.object().property(key_name)
 
 	def get_groups(self):
+		"""Get all groups"""
 		return self.groups()
 
 	def get_channels(self,group_name):
+		"""Get all channels of a group"""
 		g = self.get_groups()
 		if group_name in g:
 			return self.group_channels(group_name)
@@ -28,6 +32,7 @@ class UTdms(TdmsFile):
 		return list()
 
 	def get_channel(self,group_name,channel_name):
+		"""Get a specific channel in a group"""
 		g = self.get_channels(group_name)
 		if len(g) > 0:
 			for i in g: 

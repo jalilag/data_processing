@@ -1,24 +1,42 @@
 from user_idas import DasData
 import numpy as n
 from matplotlib import pyplot as plt
-from scipy import signal
+from scipy import signal as sig
 import time
 
-t = time.time()
-# f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
-f = DasData("data/water_10m3h_1inch_170803154549.tdms")
-tt = time.time()
-print("data loaded in " + str(tt-t) + "s")
-
-res = f.fft_calc(230,330,0.1,1,"ortho")
-# res2 = signal.resample(res,100,axis=1)
-# freq = n.fft.rfftfreq
-# res = res / c
-print("FFT mean in ",str(time.time()-tt),"s")
-res2 = signal.resample(res,100,axis=1)
-plt.imshow(abs(res2))
-
-plt.show()
+if __name__ == '__main__':
+	t = time.time()
+	# f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
+	f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
+	tt = time.time()
+	print("data loaded in " + str(tt-t) + "s")
+	k = [2]#,20,30,40,50,60]
+	for i in k:
+		res,kvec,fvec = f.fft2_calc_par(230,330,0,0.1,i,fft_type="rfft",resamp=[100,100],norm=None,crop=[-10,10,-1,8000],min_lim=0)
+		print("FFT mean in ",str(time.time()-tt),"s")
+	# fvec = sig.resample(fvec,100)
+	# fig,ax1 = plt.subplots(1,1)
+		x,y = n.meshgrid(fvec,kvec)
+		plt.pcolor(x,y,n.real(res))
+		plt.colorbar()
+		plt.savefig("real_"+str(i)+".png")
+		plt.clf()
+		plt.close()
+		plt.pcolor(x,y,n.abs(res))
+		plt.colorbar()
+		plt.savefig("abs_"+str(i)+".png")
+		plt.clf()
+		plt.close()
+# ax2.pcolor(n.abs(res))
+# N= 10
+# ax1.set_yticks(n.arange(N))
+# ax1.set_xticks(n.arange(N))
+# ax1.set_yticklabels(sig.resample(kvec,N).astype(int))
+# ax1.set_xticklabels(sig.resample(fvec,N).astype(int))
+# ax.set_yticklabels(kvec.astype(int))
+# ax.set_xticklabels(fvec.astype(int))
+# ax1.set_xticklabels(kvec)
+# ax1.set_yticklabels(fvec)
 # plt.imshow(abs(res))
 
 # res = 
