@@ -4,16 +4,27 @@ from matplotlib import pyplot as plt
 from scipy import signal as sig
 import time
 
+def clearall(except_var=None):
+	all = [var for var in globals() if var[0] != "_"]
+	for var in all:
+		if except_var is not None:
+			if var not in except_var:
+				del globals()[var]
+
 if __name__ == '__main__':
 	t = time.time()
 	# f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
-	f = DasData("data/water_1in/optical/10_170803154549.tdms","temp")
+	f = DasData("data/water_10m3h_1inch_170803154549.tdms")
 	tt = time.time()
 	print("data loaded in " + str(tt-t) + "s")
-	k = [2]#,20,30,40,50,60]
+	k = [10]
 	for i in k:
-		res,kvec,fvec = f.fft2_calc_par(230,330,0,0.1,i,fft_type="rfft",resamp=[100,100],norm=None,crop=[-10,10,-1,8000],min_lim=0)
+		# res,kvec,fvec = f.fft2_quick_calc(230,330,0,0.1,i,fft_type="fft",resamp=None,norm=None,crop=[-10,10,-1,8000],min_lim=0)
+		# res,kvec,fvec = f.fft2_quick_calc(230,330,0,0.1,i,fft_type="fft",resamp=None,norm=None,crop=[-10,10,-8000,8000],min_lim=0)
+		res,kvec,fvec = f.fft2_calc(230,330,0,0.1,i,fft_type="fft",resamp=None,norm=None,crop=[-10,10,-8000,8000],min_lim=0)
 		print("FFT mean in ",str(time.time()-tt),"s")
+
+		res,kvec,fvec = f.resamp_vecs(res,kvec,fvec,[100,100])
 	# fvec = sig.resample(fvec,100)
 	# fig,ax1 = plt.subplots(1,1)
 		x,y = n.meshgrid(fvec,kvec)
@@ -27,6 +38,9 @@ if __name__ == '__main__':
 		plt.savefig("abs_"+str(i)+".png")
 		plt.clf()
 		plt.close()
+		# clearall()
+
+
 # ax2.pcolor(n.abs(res))
 # N= 10
 # ax1.set_yticks(n.arange(N))
