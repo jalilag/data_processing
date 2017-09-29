@@ -1,6 +1,6 @@
 from user_tdms import UTdms
 import numpy as n
-import pyfftw 
+# import pyfftw 
 from scipy import signal
 from multiprocessing import Pool,Process,cpu_count
 import sys
@@ -44,7 +44,7 @@ class DasData(UTdms):
 			res[i-xfrom,0:Ny] = self.get_channel(0,i).data[yfrom:yend] 
 		return res
 
-	def fft2_calc(self,pos_start,pos_end,start_time,mean_time,coef_time=1,fft_type="fft",norm=None,dist_corr=116,resamp=None,crop=None,val_sum=None,min_lim=None):
+	def fft2_calc(self,pos_start,pos_end,start_time,mean_time,coef_time=1,fft_type="fft",norm=None,dist_corr=116,resamp=None,crop=None,val_sum=None,min_lim=None,max_lim=None):
 		""" Calculation of 2d fft
 			pos_start,pos_end: define the position to consider
 			start_time:        Time where the fft begin
@@ -66,6 +66,7 @@ class DasData(UTdms):
 			res = n.zeros((int(pos_end-pos_start),dt),dtype=complex)
 		if fft_type == "rfft" or fft_type == "irfft":
 			res = n.zeros((int(pos_end-pos_start),int(dt/2)+1),dtype=complex)
+		print(n.shape(res))
 		print("start time; i; duration")
 		for i in range(start_data,int(start_data+duration),dt):
 			print(start_data,i,duration)
@@ -74,23 +75,18 @@ class DasData(UTdms):
 			if fft_type == "ifft": res += n.fft.ifft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
 			if fft_type == "irfft": res += n.fft.irfft2(self.get_array(pos_start,pos_end,i,int(i+dt)),norm=norm)
 			c+= 1
+			res = self.set_to_lim(res,min_lim,max_lim)
 		dx = self.spatial_res/dist_corr
 		if val_sum is None: res = res/c
 		kvec = n.fft.fftfreq(n.size(res,0),dx)
-		print(kvec,n.size(kvec))
 		if fft_type == "fft" or fft_type == "ifft": 
 			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
 		if fft_type == "rfft" or fft_type == "irfft":
 			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
-
 		if crop is not None:
 			res,kvec,fvec = self.crop_vecs(res,kvec,fvec,crop)
-		if min_lim is not None:
-			for i in range(n.size(res,0)):
-				for j in range(n.size(res,1)):
-					if res[i,j] < min_lim: res[i,j] = 0
 		if resamp is not None:
-			res,kvec,fvec = self.resamp_vecs(res,kvec,fvec,100,100,False)
+			res,kvec,fvec = self.resamp_vecs(res,kvec,fvec,resamp[0],resamp[1],False)
 		res,kvec,fvec = self.sort_vecs(res,kvec,fvec)
 		print(kvec,n.size(kvec))
 		return res,kvec,fvec
@@ -194,28 +190,21 @@ class DasData(UTdms):
 		dx = self.spatial_res/dist_corr
 		if val_sum is None: res = res/c
 		kvec = n.fft.fftfreq(n.size(res,0),dx)
-		print(kvec)
 		if fft_type == "fft" or fft_type == "ifft": 
 			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
 		if fft_type == "rfft" or fft_type == "irfft":
 			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
-
 		if crop is not None:
 			res,kvec,fvec = self.crop_vecs(res,kvec,fvec,crop)
-			print(kvec)
 		if min_lim is not None:
-			for i in range(n.size(res,0)):
-				for j in range(n.size(res,1)):
-					if res[i,j] < min_lim: res[i,j] = 0
+			data = self.set_to_lim(data,min_lim)
 		if resamp is not None:
 			res,kvec,fvec = self.resamp_vecs(res,kvec,fvec,100,100,False)
-		print(kvec)
 		res,kvec,fvec = self.sort_vecs(res,kvec,fvec)
 		return res,kvec,fvec
 
 
 	def resamp_vecs(self,data,xvec,yvec,N1=100,N2=100,sort_data=True):
-		print(n.size(data))
 		data = signal.resample(data,N1,axis=0)
 		data = signal.resample(data,N2,axis=1)
 		# pool = Pool()
@@ -246,3 +235,20 @@ class DasData(UTdms):
 		for i in range(n.size(data,0)):
 			data2[i] = data[i][ysort]
 		return data2,xvec,yvec
+
+	def set_to_lim(self,data,minlim = None,maxlim=None):
+		if minlim is not None and maxlim is not None:
+			N = n.shape(data)
+			for i in range(N[0]):
+				if len(N) > 1:
+					for j in range(N[1]):
+						if minlim is not None:
+							if data[i,j] < min_lim[0]: data[i,j] = minlim[1]
+						if maxlim is not None:
+							if data[i,j] > max_lim[0]: data[i,j] = maxlim[1]
+				else:
+					if minlim is not None:
+						if data[i] < min_lim[0]: data[i] = minlim[1]
+					if maxlim is not None:
+						if data[i] > max_lim[0]: data[i] = maxlim[1]
+		return data
