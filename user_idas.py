@@ -31,6 +31,7 @@ class DasData(UTdms):
 		"pmma":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
 	}
 	def __init__(self,file, memmap_dir=None):
+		t = time.time()	
 		super().__init__(file, memmap_dir=None)
 		self.filename = self.get_param("name")
 
@@ -46,6 +47,7 @@ class DasData(UTdms):
 		self.fibre_index = float(self.get_param("FibreIndex"))
 		self.Nl = int(self.spatial_res * self.measure_length)
 		self.Nt = int(self.fsamp*self.duration)
+		print("Data loaded in " + str(time.time()-t) + " s")	
 
 	def get_array(self,xfrom,xend,yfrom,yend):
 		"""Extract an array from a TDMS file"""
@@ -93,7 +95,7 @@ class DasData(UTdms):
 			c+= 1
 		print(n.shape(res))
 		if val_type == "real": res = n.real(res)
-		if val_type == "abs": res = n.abs(res)
+		if val_type == "abs": res = n.abs(n.real(res))
 		dx = self.spatial_res/self.lines[line]["dist_ratio"]
 		if val_sum is not None: res = res/c
 		kvec = n.fft.fftfreq(n.size(res,0),dx)
