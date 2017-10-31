@@ -22,13 +22,13 @@ class DasData(UTdms):
 	Nt = 0
 
 	lines = {
-		"1":{"z1":[188,262],"z2":[325,440],"z3":[530,640],"dist_ratio":118.15879},
-		"1.5":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":170.169602},
-		"2":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":212.057504},
-		"2.5":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":256.388867},
-		"3":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
+		"1":    {"z1":[188,262],"z2":[325,440],"z3":[530,640],"dist_ratio":118.15879},
+		"1.5":  {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":170.169602},
+		"2":    {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":212.057504},
+		"2.5":  {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":256.388867},
+		"3":    {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
 		"liner":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
-		"pmma":{"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
+		"pmma": {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":311.89037},
 	}
 	def __init__(self,file, memmap_dir=None):
 		t = time.time()	
@@ -84,15 +84,33 @@ class DasData(UTdms):
 			res = n.zeros((int(self.lines[line][zone][1]-self.lines[line][zone][0]),dt),dtype=complex)
 		if fft_type == "rfft" or fft_type == "irfft":
 			res = n.zeros((int(self.lines[line][zone][1]-self.lines[line][zone][0]),int(dt/2)+1),dtype=complex)
-
+		k = cpu_count()
 		print("start time; i; duration")
-		for i in range(start_data,int(start_data+duration),dt):
-			print(start_data,i,duration)
-			if fft_type == "fft": res += self.set_to_lim(n.fft.fft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
-			if fft_type == "rfft": res += self.set_to_lim(n.fft.rfft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
-			if fft_type == "ifft": res += self.set_to_lim(n.fft.ifft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
-			if fft_type == "irfft": res += self.set_to_lim(n.fft.irfft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
-			c+= 1
+		for i in range(start_data,int(start_data+duration),k*dt):
+			argsdat = list()
+			for l in range(k):
+				if int(i+(l+1)*dt) <= int(start_data+duration):
+					argsdat.append((self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),None,(-2,-1),norm))
+			pool = Pool(k)
+			if fft_type == "fft":
+				restemp = pool.starmap(n.fft.fft2,argsdat)
+				# res += self.set_to_lim(n.fft.fft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
+			if fft_type == "rfft": 
+				restemp = pool.starmap(n.fft.rfft2,argsdat)
+				# res += self.set_to_lim(n.fft.rfft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
+			if fft_type == "ifft": 
+				restemp = pool.starmap(n.fft.ifft2,argsdat)
+				# res += self.set_to_lim(n.fft.ifft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
+			if fft_type == "irfft": 
+				restemp = pool.starmap(n.fft.irfft2,argsdat)
+				# res += self.set_to_lim(n.fft.irfft2(self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),norm=norm),min_lim,max_lim)
+			pool.close()
+			pool.join()
+			del pool
+			del argsdat
+			c+= len(restemp)
+			for j in range(len(restemp)):
+				res += self.set_to_lim(restemp[j],min_lim,max_lim)
 		print(n.shape(res))
 		if val_type == "real": res = n.real(res)
 		if val_type == "abs": res = n.abs(n.real(res))

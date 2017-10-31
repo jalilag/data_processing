@@ -1,104 +1,175 @@
-from user_idas import DasData
 import numpy as n
 from matplotlib import pyplot as plt
 from scipy import signal as sig
 import time
 import sys
 from sklearn import preprocessing as proc,svm
-from sklearn.model_selection import train_test_split 
-from sklearn.linear_model import Lasso,ElasticNet
+from sklearn.model_selection import train_test_split,cross_val_score,GridSearchCV 
+from sklearn.linear_model import Lasso,ElasticNet,Ridge
 from sklearn.metrics import r2_score
-from multiprocessing import Pool
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.manifold import Isomap
+from user_sklearn import user_grid_search
+from multiprocessing import cpu_count
 
-filepath = {"data/water/1inch/03082017/":["2","3","4","5","6","7","8","9","10","11","12"],"data/water/1inch/03102017/":["10","13"]}
+# if __name__== "__main__":
+fourier_mat = n.load("temp/fourier_mat.npy")
+# fourier_mat = n.load("temp/sum_int.npy")
+# dif_sum_int = n.load("temp/dif_sum_int.npy")
+target = n.load("temp/target.npy")
+fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+# sixtrain, sixtest,siytrain,siytest = train_test_split(sum_int,target,test_size=0.33)
+# dsixtrain, dsixtest,dsiytrain,dsiytest = train_test_split(dif_sum_int,target,test_size=0.33)
 
-fourier_mat = list()
-sum_int = list()
-dif_sum_int = list()
-target = list()
+model = "RF"
+dim_reduction = "None"
+err = 0.01
 
-for i,j in filepath.items():
-	for ii in j:
-		data_fname = ii+"m3h.tdms"
-		f = DasData(i+data_fname,"temp")
-		for iii in range(6):
-			target.append(int(ii))
-			res,kvec,fvec = f.fft2_calc("1","z2",int(10*iii),1,10,fft_type="rfft",norm=None,crop=[-f.fsamp/2/1300,f.fsamp/2/1300,0,10001],resamp=None,val_type="abs",max_lim=None)
-			res= n.real(res)
-			res = res/n.max(res)
-			fourier_mat.append(n.reshape(res,int(n.shape(res)[0]*n.shape(res)[1])))
-			argsdat = [[1300,1700,kvec,fvec,res,1,1],[1300,1700,kvec,fvec,res,1,-1]]
-			t = time.time()
-			pool = Pool()
-			ss = pool.starmap(f.get_sum_with_speed_range,argsdat)
-			speed = ss[0][0]
-			s1 = ss[0][1]
-			s2 = ss[1][1]
-			print(time.time()-t)
-			dif_sum_int.append(n.abs(s1-s2)/n.max(n.abs(s1-s2)))
-			s=n.concatenate((n.array(s1),n.array(s2)))
-			s = s/n.max(s)
-			sum_int.append(s)
+# PCA
+if dim_reduction == "PCA":
+	pca = PCA(n_components=78)
+	dim = pca.fit(fourier_mat)
+	fourier_mat = dim.transform(fourier_mat)
 
+# Lasso
+if model == "Lasso":
+	## Find params
+	params = {"alpha":{"start":0,"end":1}}
+	clf = user_grid_search(Lasso(),fourier_mat,target,params,err)
+	print("Best params for Lasso")
+	for ii,jj in clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()].items():
+		print(ii,": {0:9.9f}".format(jj))
+	## Test model
+	params = clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()]
+	ares = list()		
+	for i in range(100):	
+		fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+		clf = Lasso(alpha=params["alpha"])
+		clf_pred = clf.fit(fmxtrain, fmytrain)	
+		lres = list()
+		for j in range(100):
+			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+			# clf = Lasso(alpha=n.mean(ares))		
+			lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
+		ares.append(n.mean(lres))
+		print(ares[-1])
+	print("Mean res",n.mean(ares))
+	print(params)
 
-fourier_mat = n.array(fourier_mat)
-sum_int = n.array(sum_int)
-dif_sum_int = n.array(dif_sum_int)
-target = n.array(target)
-n.save("temp/fourier_mat",fourier_mat)
-n.save("temp/sum_int",sum_int)
-n.save("temp/dif_sum_int",dif_sum_int)
-n.save("temp/target",target)
-
-# xtrain, xtest,ytrain,ytest = train_test_split(vecs,vecy,test_size=0.33)
-fmtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
-sixtrain, sixtest,siytrain,siytest = train_test_split(sum_int,target,test_size=0.33)
-dsixtrain, dsixtest,dsiytrain,dsiytest = train_test_split(dif_sum_int,target,test_size=0.33)
-
-
-
-alpha = n.arange(0,0.002,0.0001)
-lasso_res = list()
-for i in alpha:
-	lasso = Lasso(alpha=i)
-	y_pred_lasso = lasso.fit(xtrain, ytrain).predict(xtest)
-	lasso_res.append(r2_score(ytest, y_pred_lasso))
-
-
-lasso_max = n.array(lasso_res).argmax()
-print(alpha[lasso_max],lasso_res[lasso_max])
-# print("r^2 on test data : %f" % r2_score_lasso)
-
-# #############################################################################
 # ElasticNet
-from sklearn.linear_model import ElasticNet
+if model == "ElasticNet":
+	## Find params
+	params = {"alpha":{"start":0.00001,"end":1},"l1_ratio":{"start":0,"end":1}}
+	clf = user_grid_search(ElasticNet(),fourier_mat,target,params,err)
+	print("Best params for Lasso")
+	for ii,jj in clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()].items():
+		print(ii,": {0:9.9f}".format(jj))
+	## Test model
+	params = clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()]
+	ares = list()		
+	for i in range(100):	
+		fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+		clf = ElasticNet(alpha=params["alpha"],l1_ratio=params["l1_ratio"])
+		clf_pred = clf.fit(fmxtrain, fmytrain)	
+		lres = list()
+		for j in range(100):
+			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+			lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
+		ares.append(n.mean(lres))
+		print(ares[-1])
+	print("Mean res",n.mean(ares))
+	print(params)
 
-enet = ElasticNet(alpha=alpha, l1_ratio=0.7)
 
-y_pred_enet = enet.fit(X_train, y_train).predict(X_test)
-r2_score_enet = r2_score(y_test, y_pred_enet)
-print(enet)
-print("r^2 on test data : %f" % r2_score_enet)
+# Ridge
+if model == "Ridge":
+	## Find params
+	params = {"alpha":{"start":0,"end":1}}
+	clf = user_grid_search(Ridge(),fourier_mat,target,params,err)
+	print("Best params for Lasso")
+	for ii,jj in clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()].items():
+		print(ii,": {0:9.9f}".format(jj))
+	## Test model
+	params = clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()]
+	ares = list()		
+	for i in range(100):	
+		fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+		clf = Ridge(alpha=params["alpha"])
+		clf_pred = clf.fit(fmxtrain, fmytrain)	
+		lres = list()
+		for j in range(100):
+			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+			# clf = Lasso(alpha=n.mean(ares))		
+			lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
+		ares.append(n.mean(lres))
+		print(ares[-1])
+	print("Mean res",n.mean(ares))
+	print(params)
 
+
+# SVR
+if model == "SVR":
+	## Find params
+	params = {"epsilon":{"start":0,"end":1},"C":{"start":0.1,"end":1000}}
+	clf = user_grid_search(svm.SVR(kernel="linear"),fourier_mat,target,params,err)
+	print("Best params for Lasso")
+	for ii,jj in clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()].items():
+		print(ii,":",jj)
+	## Test model
+	params = clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()]
+	ares = list()		
+	for i in range(100):	
+		fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+		clf = svm.SVR(kernel="linear",epsilon=params["epsilon"],C=params["C"])
+		clf_pred = clf.fit(fmxtrain, fmytrain)	
+		lres = list()
+		for j in range(100):
+			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+			# clf = Lasso(alpha=n.mean(ares))		
+			lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
+		ares.append(n.mean(lres))
+		print(ares[-1])
+	print("Mean res",n.mean(ares))
+	print(params)
+
+
+# Random Forest
+if model == "RF":
+	## Find params
+	params = {"n_estimators":n.arange(2,100,1)}
+	clf = user_grid_search(RandomForestRegressor(),fourier_mat,target,params,err)
+	print("Best params for RF")
+	for ii,jj in clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()].items():
+		print(ii,": {0:9.9f}".format(jj))
+	## Test model
+	params = clf.cv_results_["params"][clf.cv_results_["mean_test_score"].argmax()]
+	ares = list()		
+	for i in range(100):	
+		fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+		clf = RandomForestRegressor(n_estimators=params["n_estimators"])
+		clf_pred = clf.fit(fmxtrain, fmytrain)	
+		lres = list()
+		for j in range(100):
+			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(fourier_mat,target,test_size=0.33)
+			# clf = Lasso(alpha=n.mean(ares))		
+			lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
+		ares.append(n.mean(lres))
+		print(ares[-1])
+	print("Mean res",n.mean(ares))
+	print(params)
+
+## Figures
 plt.figure()
-inc1 = n.abs(y_test-y_pred_lasso)/y_test
-plt.plot(y_test,inc1,"x")
-fit2 = n.poly1d(n.polyfit(y_test,inc1,8))
-plt.plot(n.sort(y_test),fit2(n.sort(y_test)),"-")
-plt.xlabel("Desired Flowrate")
-plt.ylabel("Relative Uncertainty")
-plt.grid()
-plt.title("LASSO Score = "+str(r2_score_lasso))
+plt.subplot(211)
+plt.plot(target,n.abs(clf_pred.predict(fourier_mat)-target)/target*100,"x")
+plt.xlabel("Flowrates (m3/h)")
+plt.ylabel("%")
+plt.title("Relative uncertainty")
+plt.subplot(212)
+plt.plot(target,clf_pred.predict(fourier_mat),"x")
+plt.xlabel("Desired Flowrates (m3/h)")
+plt.ylabel("Measured Flowrates (m3/h)")
+plt.show()
 
-plt.figure()
-inc2 = n.abs(y_test-y_pred_enet)/y_test
-plt.plot(y_test,inc2,"x")
-fit2 = n.poly1d(n.polyfit(y_test,inc2,8))
-plt.plot(n.sort(y_test),fit2(n.sort(y_test)),"-")
-plt.xlabel("Desired Flowrate")
-plt.ylabel("Relative Uncertainty")
-plt.grid()
-plt.title("Elastic NET Score = "+str(r2_score_enet))
-	# res = proc.MinMaxScaler().fit_transform(n.real(res))
-
-	# res=f.set_to_lim(res,min_lim=[0.7,0])
