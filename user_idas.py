@@ -5,6 +5,7 @@ from matplotlib import cm
 import pyfftw as fftw
 import cv2
 import time
+import datetime
 from scipy import signal
 from scipy import ndimage as nd
 from multiprocessing import Pool,Process,cpu_count
@@ -40,6 +41,7 @@ class DasData(UTdms):
 		t = time.time()	
 		super().__init__(file, memmap_dir=None)
 		self.filename = self.get_param("name")
+		print("Working file :",self.filename)
 
 		self.fsamp = int(self.get_param("SamplingFrequency[Hz]"))
 		self.spatial_res = float(self.get_param("SpatialResolution[m]"))
@@ -86,10 +88,12 @@ class DasData(UTdms):
 		start_data = int(start_time*self.fsamp)
 		dt = int(mean_time*self.fsamp)
 		duration = int(mean_time*coef_time*self.fsamp)
-		if fft_type == "fft" or fft_type == "ifft":
+		if fft_type == "fft" or fft_type == "ifft" or fft_type == "fft2":
 			res = n.zeros((int(self.lines[line][zone][1]-self.lines[line][zone][0]),dt),dtype=complex)
-		if fft_type == "rfft" or fft_type == "irfft":
+		if fft_type == "rfft" or fft_type == "irfft" or fft_type == "rfft2":
 			res = n.zeros((int(self.lines[line][zone][1]-self.lines[line][zone][0]),int(dt/2)+1),dtype=complex)
+			# if fft_type == "rfft2":
+			# 	res = n.zeros((int((self.lines[line][zone][1]-self.lines[line][zone][0])/2)+1,dt),dtype=complex)
 		k = cpu_count()
 		print("FFT time")
 		for i in range(start_data,int(start_data+duration),k*dt):
@@ -97,13 +101,18 @@ class DasData(UTdms):
 			print(i)
 			for l in range(k):
 				if int(i+(l+1)*dt) <= int(start_data+duration):
-					argsdat.append((self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),None,-1,norm))
+					if fft_type == "rfft2" or fft_type == "fft2":
+						argsdat.append((self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),None,(-2,-1),norm))
+					else:
+						argsdat.append((self.get_array(self.lines[line][zone][0],self.lines[line][zone][1],i,int(i+dt)),None,1,norm))
 			pool = Pool(k)
 			t=time.time()
 			if fft_type == "fft": restemp = pool.starmap(n.fft.fft,argsdat)
 			if fft_type == "rfft": restemp = pool.starmap(n.fft.rfft,argsdat)
 			if fft_type == "ifft": restemp = pool.starmap(n.fft.ifft,argsdat)
 			if fft_type == "irfft": restemp = pool.starmap(n.fft.irfft,argsdat)
+			if fft_type == "fft2": restemp = pool.starmap(n.fft.fft2,argsdat)
+			if fft_type == "rfft2": restemp = pool.starmap(n.fft.rfft2,argsdat)
 			pool.close()
 			pool.join()
 			print("FFT time finished in ",time.time()-t,"s")
@@ -117,18 +126,17 @@ class DasData(UTdms):
 					for i,j in pp_stack.items():
 						if j["args"] is not None: aa = j["func"](n.real(aa),**j["args"])
 						else: aa = j["func"](n.real(aa))
-				print(n.shape(aa),n.shape(res),type(aa),type(res))
 				res += aa 
 			del restemp
 		# X and Y vec calc
-		if fft_type == "fft" or fft_type == "ifft": 
+		if fft_type == "fft" or fft_type == "ifft" or fft_type == "fft2": 
 			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
-		if fft_type == "rfft" or fft_type == "irfft":
+		if fft_type == "rfft" or fft_type == "irfft" or fft_type == "rfft2":
 			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
-		res,[kvec,fvec] = vt.sort_vecs(res,[None,fvec])
+		if fft_type != "rfft2" or fft_type != "fft2":
+			res,[kvec,fvec] = vt.sort_vecs(res,[None,fvec])
 		dx = self.spatial_res/self.lines[line]["dist_ratio"]
 		kvec = n.fft.fftfreq(n.size(res,0),dx)
-
 		# Post fft time processing
 		if pp_fftt is not None:
 			for i,j in pp_fftt.items():
@@ -136,7 +144,8 @@ class DasData(UTdms):
 				else: res = j["func"](n.real(res))
 		print("FFT time calc in progress")
 		t=time.time()
-		res = n.fft.fft(res,None,-2,norm)
+		if fft_type != "fft2" and fft_type != "rfft2":
+			res = n.fft.fft(res,None,0,norm)
 		print("FFT space calc finished in",time.time()-t,"s")
 		# Post fft space processing
 		if pp_ffts is not None:
@@ -335,24 +344,6 @@ class DasData(UTdms):
 		return signal.lfilter(b,a,data,zi=zi)
 		# return signal.filtfilt(b,a,data)
 
-	def highlight_freq(self,data,fvec,axis=-1,flow=None,fhigh=None,coef=0.9):
-		if axis == -1:
-			if flow is not None:
-				ysort = n.where((fvec > fhigh))[0]
-				for i in range(n.size(data,0)):
-					data[i][ysort] = data[i][ysort]*coef 
-			if fhigh is not None:
-				ysort = n.where((fvec < flow))[0]
-				for i in range(n.size(data,0)):
-					data[i][ysort] = data[i][ysort]*coef
-		elif axis == -2:
-			if flow is not None:
-				ysort = n.where((fvec > fhigh))[0]
-				data[ysort] = data[ysort]*coef 
-			if fhigh is not None:
-				ysort = n.where((fvec < flow))[0]
-				data[ysort] = data[ysort]*coef 
-		return data 
 
 	def set_bandwidth(self,data,xvec,boundaries,axis=-1,val2set=0):
 		if axis == -1:
@@ -495,3 +486,24 @@ class DasData(UTdms):
 	        i += 1
 
 	    return u
+
+def read_param_data(fname):
+	mat_param = list()
+	print(fname)
+	try:
+		fp = open(fname,"r")
+		ent = fp.readline().split("\n")[0].split(";")
+		l = fp.read().split("\n")
+		fp.close
+	except:
+		return None
+	for line in l:
+		if line != "": mat_param.append(line.split(";"))
+	mat_param = n.array(mat_param).astype(n.float)
+	start = mat_param[0,0]
+	end = mat_param[-1,0]	
+	mat_param[:,0] = mat_param[:,0]-mat_param[0,0]
+	return mat_param,ent,datetime.datetime.fromtimestamp(start),datetime.datetime.fromtimestamp(end)
+
+def mean_over_time_range(mat,start,end,keyid=1):
+	return n.mean(mat[n.where((mat[:,0]>=start) & (mat[:,0]<end)),keyid])

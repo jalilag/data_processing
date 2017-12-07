@@ -54,3 +54,23 @@ def put_mat_in_vec(data):
 
 def normL3(res):
 	return res/n.max(n.abs(res))
+
+def highlight_freq(data,fvec,axis=-1,flow=None,fhigh=None,coef=0.9):
+	if axis == -1:
+		if fhigh is not None:
+			ysort = n.where((fvec > fhigh))[0]
+			for i in range(n.size(data,0)):
+				data[i][ysort] = data[i][ysort]*coef 
+		if flow is not None:
+			ysort = n.where((fvec < flow))[0]
+			for i in range(n.size(data,0)):
+				data[i][ysort] = data[i][ysort]*coef
+	elif axis == -2:
+		if flow is not None:
+			ysort = n.where((fvec > fhigh))[0]
+			data[ysort] = data[ysort]*coef 
+		if fhigh is not None:
+			ysort = n.where((fvec < flow))[0]
+			data[ysort] = data[ysort]*coef 
+	return data 
+	

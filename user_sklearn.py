@@ -23,7 +23,7 @@ class trainData():
 		self.target = n.real(target_file)
 		self.err = err
 
-	def try_model(self,model="Lasso",model_params=None,dim_reduction="None",with_plot=False):
+	def try_model(self,model="Lasso",model_params=None,dim_reduction="None",with_plot=False,Niter=100):
 		# PCA
 		if dim_reduction is not None:
 			if dim_reduction[0] == "PCA":
@@ -59,7 +59,7 @@ class trainData():
 			params = model_params
 		## Test model
 		ares = list()		
-		for i in range(100):	
+		for i in range(Niter):	
 			fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(self.fourier_mat,self.target,test_size=0.33)
 			if model == "Lasso": clf = Lasso(**params)
 			if model == "ElasticNet": clf = ElasticNet(**params)
@@ -68,12 +68,14 @@ class trainData():
 			if model == "RF": clf = RandomForestRegressor(**params)
 			clf_pred = clf.fit(fmxtrain, fmytrain)	
 			lres = list()
-			for j in range(100):
+			for j in range(Niter):
 				fmxtrain, fmxtest,fmytrain,fmytest = train_test_split(self.fourier_mat,self.target,test_size=0.33)
 				lres.append(r2_score(fmytest, clf_pred.predict(fmxtest)))
 			ares.append(n.mean(lres))
 			print(ares[-1])
 
+		s = 1-n.sum(n.abs(clf_pred.predict(self.fourier_mat)-self.target)/self.target)/len(self.target)
+		print(s)
 		## Figures
 		if with_plot:
 			plt.figure()
@@ -81,10 +83,11 @@ class trainData():
 			plt.plot(self.target,n.abs(clf_pred.predict(self.fourier_mat)-self.target)/self.target*100,"x")
 			plt.xlabel("Flowrates (m3/h)")
 			plt.ylabel("Relative uncertainty%")
-			plt.title("Model : "+model)
+			plt.title(model + " model" + " -> "+"{:.2%}".format(s))
+
 			plt.grid()
 			plt.subplot(212)
-			plt.title("Model : "+model)
+			# plt.title("Model : "+model)
 			plt.plot(self.target,clf_pred.predict(self.fourier_mat),"x")
 			plt.xlabel("Desired Flowrates (m3/h)")
 			plt.ylabel("Predicted Flowrates (m3/h)")
