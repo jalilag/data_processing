@@ -3,7 +3,7 @@ import numpy as n
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import pyfftw as fftw
-import cv2
+# import cv2
 import time
 import datetime
 from scipy import signal
@@ -12,7 +12,7 @@ from multiprocessing import Pool,Process,cpu_count
 from sklearn import preprocessing as proc
 import sys
 import os
-import pywt
+# import pywt
 import user_vectools as vt
 
 class DasData(UTdms):

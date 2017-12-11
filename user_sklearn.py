@@ -23,7 +23,7 @@ class trainData():
 		self.target = n.real(target_file)
 		self.err = err
 
-	def try_model(self,model="Lasso",model_params=None,dim_reduction="None",with_plot=False,Niter=100):
+	def try_model(self,model="Lasso",model_params=None,dim_reduction=None,with_plot=False,Niter=100):
 		# PCA
 		if dim_reduction is not None:
 			if dim_reduction[0] == "PCA":
@@ -93,7 +93,10 @@ class trainData():
 			plt.ylabel("Predicted Flowrates (m3/h)")
 			plt.grid()
 			plt.show()
-		return clf,params,[n.mean(ares),n.sqrt(n.var(ares))]
+		if dim_reduction is not None:
+			return clf_pred,dim,params,[n.mean(ares),n.sqrt(n.var(ares))]
+		else:
+			return clf_pred,params,[n.mean(ares),n.sqrt(n.var(ares))]
 
 	def user_grid_search(self,skmod,params,max_err=0.01,n_jobs=1):
 		parameters = dict()
