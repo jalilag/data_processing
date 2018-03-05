@@ -3,7 +3,6 @@ import numpy as n
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import pyfftw as fftw
-# import cv2
 import time
 import datetime
 from scipy import signal
@@ -12,10 +11,10 @@ from multiprocessing import Pool,Process,cpu_count
 from sklearn import preprocessing as proc
 import sys
 import os
-# import pywt
 import user_vectools as vt
 
 class DasData(UTdms):
+	"""Classe gérant la lecture des données et leurs pré-traitement"""
 	filename =""
 	fsamp = 0
 	spatial_res = 0
@@ -27,7 +26,9 @@ class DasData(UTdms):
 	fibre_corr = 0
 	Nl = 0
 	Nt = 0
-
+	fvec = None
+	kvec = None
+	# Les zones doivent être configurées avec le iDAS
 	lines = {
 		"1":    {"z1":[188,262],"z2":[325,440],"z3":[530,640],"dist_ratio":118.15879},
 		"1.5":  {"z1":[180,280],"z2":[241,361],"z3":[446,640],"dist_ratio":170.169602},
@@ -40,9 +41,7 @@ class DasData(UTdms):
 	def __init__(self,file, memmap_dir=None):
 		t = time.time()	
 		super().__init__(file, memmap_dir=None)
-		self.filename = self.get_param("name")
-		print("Working file :",self.filename)
-
+		self.filename = os.path.splitext(os.path.basename(file))[0]
 		self.fsamp = int(self.get_param("SamplingFrequency[Hz]"))
 		self.spatial_res = float(self.get_param("SpatialResolution[m]"))
 		self.duration = float(self.get_param("StreamTime[s]"))
@@ -56,9 +55,25 @@ class DasData(UTdms):
 		self.Nl = int(self.spatial_res * self.measure_length)
 		self.Nt = int(self.fsamp*self.duration)
 		print("Data loaded in " + str(time.time()-t) + " s")	
+		self.file_info()
+
+	def file_info(self):
+		s = "Filename " + str(self.filename) + "\n"
+		s += "Fréquence d'échantillonage " +str(self.fsamp) + "\n"
+		s += "Résolution spatiale " + str(self.spatial_res) + " m\n"
+		s += "Début de mesure à " + str(self.start_pos) + " m\n"
+		s += "Fin de mesure à " + str(self.end_pos) + " m\n"
+		s += "Durée totale " + str(self.duration) + "\n"
+		s += "Index de fibre " + str(self.fibre_index) + "\n"
+		s += "Correction de fibre " + str(self.fibre_corr) + "\n"
+		print(s)
 
 	def get_array(self,xfrom,xend,yfrom,yend):
-		"""Extract an array from a TDMS file"""
+		"""Extrait un tableau des données brutes
+
+		xfrom et xend sont les limites spatiales
+		yfrom et yend sont les limites temporelles
+		"""
 		if xend < xfrom or yend < yfrom or xend > self.Nl or yend > self.Nt:
 			print("Erreur indice de matrice")
 			return list()
@@ -70,19 +85,21 @@ class DasData(UTdms):
 		print(n.shape(res))
 		return res
 
+
 	def fft2_calc(self,line,zone,start_time,mean_time,coef_time=1,fft_type="fft",norm=None,resamp=None,crop=None,val_sum=None,min_lim=None,max_lim=None,val_type=None,data_filter=None,pp_stack=None,pp_fftt=None,pp_ffts=None):
-		""" Calculation of 2d fft
-			pos_start,pos_end: define the position to consider
-			start_time:        Time where the fft begin
-			mean_time:         Duration of the signal on which FFT is calculated   
-			coef_time:         How many sets are stacked
-			fft_type:          fft,rfft,ifft,irfft
-			norm:			   None or ortho
-			dist_corr:		   Relation between fiber length and pipe length
-			resamp:            [lsampling,timesampling]
-			crop:              [kinf,ksup,finf,fsup]
-			val_sum:           Intensity are summed or averaged (default averaged)
-			min_lim:           Set to 0 intensity less than min_lim
+		""" Calcul de la transformée 2D
+
+		pos_start,pos_end: position intiale et finale de calcul
+		start_time:        Temps à partir duquel la FFT commence 
+		mean_time:         Durée sur laquelle la FFT est appliquée   
+		coef_time:         Nombre de set consécutif de donnée de durée mean_time à concaténer 
+		fft_type:          fft,rfft,ifft,irfft
+		norm:			   None or ortho
+		dist_corr:		   Relation between fiber length and pipe length
+		resamp:            [lsampling,timesampling]
+		crop:              [kinf,ksup,finf,fsup]
+		val_sum:           Intensity are summed or averaged (default averaged)
+		min_lim:           Set to 0 intensity less than min_lim
 		"""
 		c = 0
 		start_data = int(start_time*self.fsamp)
@@ -111,8 +128,8 @@ class DasData(UTdms):
 			if fft_type == "rfft": restemp = pool.starmap(n.fft.rfft,argsdat)
 			if fft_type == "ifft": restemp = pool.starmap(n.fft.ifft,argsdat)
 			if fft_type == "irfft": restemp = pool.starmap(n.fft.irfft,argsdat)
-			if fft_type == "fft2": restemp = pool.starmap(n.fft.fft2,argsdat)
-			if fft_type == "rfft2": restemp = pool.starmap(n.fft.rfft2,argsdat)
+			# if fft_type == "fft2": restemp = pool.starmap(n.fft.fft2,argsdat)
+			# if fft_type == "rfft2": restemp = pool.starmap(n.fft.rfft2,argsdat)
 			pool.close()
 			pool.join()
 			print("FFT time finished in ",time.time()-t,"s")
@@ -124,49 +141,47 @@ class DasData(UTdms):
 				aa = vt.set_to_lim(restemp[j,:,:],min_lim,max_lim)
 				if pp_stack is not None:
 					for i,j in pp_stack.items():
-						if j["args"] is not None: aa = j["func"](n.real(aa),**j["args"])
-						else: aa = j["func"](n.real(aa))
+						if j["args"] is not None: aa = j["func"](aa,**j["args"])
+						else: aa = j["func"](aa)
 				res += aa 
 			del restemp
 		# X and Y vec calc
 		if fft_type == "fft" or fft_type == "ifft" or fft_type == "fft2": 
-			fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
+			self.fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
 		if fft_type == "rfft" or fft_type == "irfft" or fft_type == "rfft2":
-			fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
-		if fft_type != "rfft2" or fft_type != "fft2":
-			res,[kvec,fvec] = vt.sort_vecs(res,[None,fvec])
+			self.fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
+		# if fft_type != "rfft2" or fft_type != "fft2":
+		res,[k,self.fvec] = vt.sort_vecs(res,[None,self.fvec])
 		dx = self.spatial_res/self.lines[line]["dist_ratio"]
-		kvec = n.fft.fftfreq(n.size(res,0),dx)
+		self.kvec = n.fft.fftfreq(n.size(res,0),dx)
 		# Post fft time processing
 		if pp_fftt is not None:
 			for i,j in pp_fftt.items():
-				if j["args"] is not None: res = j["func"](n.real(res),**j["args"])
-				else: res = j["func"](n.real(res))
+				if j["args"] is not None: res = j["func"](res,**j["args"])
+				else: res = j["func"](res)
 		print("FFT time calc in progress")
 		t=time.time()
-		if fft_type != "fft2" and fft_type != "rfft2":
-			res = n.fft.fft(res,None,0,norm)
+		# if fft_type != "fft2" and fft_type != "rfft2":
+		res = n.fft.fft(res,None,0,norm)
 		print("FFT space calc finished in",time.time()-t,"s")
 		# Post fft space processing
 		if pp_ffts is not None:
 			for i,j in pp_ffts.items():
-				if j["args"] is not None: res = j["func"](n.real(res),**j["args"])
-				else: res = j["func"](n.real(res))
+				if j["args"] is not None: res = j["func"](res,**j["args"])
+				else: res = j["func"](res)
 
 		# Post processing
 		if val_type == "real": res = n.real(res)
-		if val_type == "abs": res = n.abs(n.real(res))
+		if val_type == "abs": res = n.abs(res)
 		if val_sum is not None: res = res/c
 		if crop is not None:
-			res,[kvec,fvec] = vt.crop_vecs(res,[kvec,fvec],crop)
+			res,[self.kvec,self.fvec] = vt.crop_vecs(res,[self.kvec,self.fvec],crop)
 		if resamp is not None:
-			if resamp[0] == "auto": resamp[0] = len(fvec)
-			if resamp[1] == "auto": resamp[1] = len(kvec)
-			res,[kvec,fvec] = vt.resamp_vecs(res,[kvec,fvec],[resamp[0],resamp[1]],False)
-		res,[kvec,fvec] = vt.sort_vecs(res,[kvec,fvec])
-		return res,kvec,fvec
-
-
+			if resamp[0] == "auto": resamp[0] = len(self.fvec)
+			if resamp[1] == "auto": resamp[1] = len(self.kvec)
+			res,[self.kvec,self.fvec] = vt.resamp_vecs(res,[self.kvec,self.fvec],[resamp[0],resamp[1]],False)
+		res,[self.kvec,self.fvec] = vt.sort_vecs(res,[self.kvec,self.fvec])
+		return res,self.kvec,self.fvec
 
 	def resamp_raw_data(self,data,N):
 		return ndimage.zoom(data,N/len(data))
@@ -410,6 +425,20 @@ class DasData(UTdms):
 					res[i,j] = 0
 		return res
 
+	def random_rejection(self,data,min_lim=None,max_lim=None):
+		if min_lim is not None:
+			idx = n.array(n.where(self.fvec<min_lim[0]))
+			for i in idx:
+				for j in range(n.size(data,0)):
+					if n.random.rand() > min_lim[1]:
+						data[j,i] = 0
+		if max_lim is not None:
+			idx = n.array(n.where(self.fvec>max_lim[0]))
+			for i in idx:
+				for j in range(n.size(data,0)):
+					if n.random.rand() > max_lim[1]:
+						data[j,i] = 0
+		return data
 
 
 
@@ -507,3 +536,5 @@ def read_param_data(fname):
 
 def mean_over_time_range(mat,start,end,keyid=1):
 	return n.mean(mat[n.where((mat[:,0]>=start) & (mat[:,0]<end)),keyid])
+
+
