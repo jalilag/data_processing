@@ -58,6 +58,7 @@ class DasData(UTdms):
 		self.file_info()
 
 	def file_info(self):
+		"""Description du fichier de donnée"""
 		s = "Filename " + str(self.filename) + "\n"
 		s += "Fréquence d'échantillonage " +str(self.fsamp) + "\n"
 		s += "Résolution spatiale " + str(self.spatial_res) + " m\n"
@@ -99,7 +100,12 @@ class DasData(UTdms):
 		resamp:            [lsampling,timesampling]
 		crop:              [kinf,ksup,finf,fsup]
 		val_sum:           Intensity are summed or averaged (default averaged)
-		min_lim:           Set to 0 intensity less than min_lim
+		min_lim:           Set to min_lim[1] intensity less than min_lim[0]
+		max_lim:           Set to max_lim[1] intensity more than max_lim[0]
+		val_type		   Output data "real" or "abs"
+		pp_stack		   Functions and args to apply before data stacking after the FFTT
+		pp_fftt			   Functions and args to apply after data stacking
+		pp_ffts			   Functions and args to apply after the FFTS
 		"""
 		c = 0
 		start_data = int(start_time*self.fsamp)
@@ -128,8 +134,6 @@ class DasData(UTdms):
 			if fft_type == "rfft": restemp = pool.starmap(n.fft.rfft,argsdat)
 			if fft_type == "ifft": restemp = pool.starmap(n.fft.ifft,argsdat)
 			if fft_type == "irfft": restemp = pool.starmap(n.fft.irfft,argsdat)
-			# if fft_type == "fft2": restemp = pool.starmap(n.fft.fft2,argsdat)
-			# if fft_type == "rfft2": restemp = pool.starmap(n.fft.rfft2,argsdat)
 			pool.close()
 			pool.join()
 			print("FFT time finished in ",time.time()-t,"s")
@@ -150,7 +154,6 @@ class DasData(UTdms):
 			self.fvec = n.fft.fftfreq(n.size(res,1),1/self.fsamp)
 		if fft_type == "rfft" or fft_type == "irfft" or fft_type == "rfft2":
 			self.fvec = n.fft.rfftfreq((n.size(res,1)-1)*2+1,1/self.fsamp)
-		# if fft_type != "rfft2" or fft_type != "fft2":
 		res,[k,self.fvec] = vt.sort_vecs(res,[None,self.fvec])
 		dx = self.spatial_res/self.lines[line]["dist_ratio"]
 		self.kvec = n.fft.fftfreq(n.size(res,0),dx)
@@ -336,7 +339,6 @@ class DasData(UTdms):
 
 		return l
 
-
 	def mobil_cumulativ_vec(self,vecx,vecy,step):
 		l=list()
 		for i in range(0,len(vecx)-step,step):
@@ -357,10 +359,9 @@ class DasData(UTdms):
 		b,a = signal.butter(Norder,fcut,btype="lowpass")
 		zi = signal.lfilter_zi(b,a)
 		return signal.lfilter(b,a,data,zi=zi)
-		# return signal.filtfilt(b,a,data)
-
 
 	def set_bandwidth(self,data,xvec,boundaries,axis=-1,val2set=0):
+		"""Allow to set a specific intensity on a certain bandwidth""" 
 		if axis == -1:
 			ysort = n.where((xvec > boundaries[0]) & (xvec < boundaries[1]))[0]
 			for i in range(n.size(data,0)):
@@ -370,7 +371,8 @@ class DasData(UTdms):
 			data[xsort] = val2set
 		return data
 
-	def quarter_sum(self,res,kvec,fvec,valtype="real"):		
+	def quarter_sum(self,res,kvec,fvec,valtype="real"):
+		
 		k0 = n.abs(kvec-0).argmin()
 		f0 = n.abs(fvec-0).argmin()
 		Nk = len(kvec[k0:])
